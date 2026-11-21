@@ -23,6 +23,10 @@ Android 8.0 以降で `ClipClean-Android.apk` をインストールできます�
 
 ## ビルド
 
+Release Please のリリース PR を `main` にマージすると、GitHub Actions が Windows ZIP と署名済み Android APK を作成し、SHA-256 を検証してから GitHub Release を公開します。タグは `v0.1.0` の形式です。Android の自動署名にはリポジトリの Actions Secrets `CLIPCLEAN_KEYSTORE_BASE64` と `CLIPCLEAN_KEYSTORE_PASSWORD` を使います。
+
+配布ファイルを検証するには、Release の `SHA256SUMS.txt` を同じフォルダーに保存して `sha256sum -c SHA256SUMS.txt` を実行します。Windows PowerShell では `Get-FileHash` で各ファイルの SHA-256 を表示して照合できます。
+
 Go 1.26 以降で共通処理をテストできます。
 
 ```powershell
