@@ -8,8 +8,9 @@ import android.os.Build;
 import android.os.PersistableBundle;
 import android.widget.Toast;
 
-import clipclean.core.Settings;
-import clipclean.core.UrlCleaner;
+import clipclean.bridge.mobile.Mobile;
+import clipclean.bridge.mobile.Result;
+import clipclean.bridge.mobile.Settings;
 
 final class ClipboardActions {
     private static final String SENSITIVE = "android.content.extra.IS_SENSITIVE";
@@ -50,7 +51,7 @@ final class ClipboardActions {
             message(context, "整理できるテキストがありません");
             return;
         }
-        UrlCleaner.Result result = UrlCleaner.clean(text.toString(), settings);
+        Result result = Mobile.clean(text.toString(), settings);
         if (!result.supported()) {
             message(context, "整理できるURLがありません");
             return;

@@ -23,10 +23,30 @@ Android 8.0 以降で `ClipClean-Android-debug.apk` をインストールでき�
 
 ## ビルド
 
-Windows の JDK 17 環境で、Android SDK Platform 35 を用意し、`JAVA_HOME` と `ANDROID_HOME` を設定します。Gradle 8.11.1 で以下を実行すると `dist` に ZIP とデバッグ APK が生成されます。
+Go 1.26 以降で共通処理をテストできます。
 
 ```powershell
-gradle :core:check :windows:portableZip :android-app:debugApk
+go test ./...
 ```
 
-`core` は Android API を使わない Java ライブラリです。キーボードから利用するときは、文字列と `Settings` を `UrlCleaner.clean` に渡すと、対応URLの有無、変更の有無、整理後の文字列を受け取れます。
+### Windows
+
+Windows の PowerShell で実行すると、`dist/ClipClean-Windows.zip` が生成されます。ビルドと実行に Java は不要です。
+
+```powershell
+.\windows\package.ps1
+```
+
+### Android
+
+JDK 17、Gradle 8.11.1、Android SDK Platform 35、Android NDK r28 以降を用意し、`JAVA_HOME` と `ANDROID_HOME` を設定します。サイドバイサイドでインストールした NDK は自動検出されます。`ANDROID_NDK_HOME` で個別に指定できます。Go Mobile は Go モジュールに記録されたバージョンを Gradle が呼び出します。
+
+```powershell
+gradle :android-app:debugApk
+```
+
+`dist/ClipClean-Android-debug.apk` が生成されます。Android の画面、共有メニュー、クリップボード連携には Java を使い、URL整理と設定処理は Windows と同じ Go コードを呼び出します。
+
+### Go から利用する
+
+`net.neomenia/clipclean/core` の `core.Clean(text, settings)` で、整理後の文字列、対応URLの有無、変更の有無を取得できます。`core.Settings{}` は初期設定です。`core.DecodeSettings` に既存の設定JSONを渡すと、保存済みの設定を使えます。

@@ -20,8 +20,41 @@ android {
     }
 }
 
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+def toolsDir = layout.buildDirectory.dir('go-tools')
+def gobindName = System.getProperty('os.name').startsWith('Windows') ? 'gobind.exe' : 'gobind'
+def gobind = toolsDir.map { it.file(gobindName) }
+def goAar = layout.buildDirectory.file('go/clipclean.aar')
+def goModuleFiles = rootProject.files('go.mod', 'go.sum')
+
+def buildGobind = tasks.register('buildGobind', Exec) {
+    inputs.files(goModuleFiles)
+    outputs.file(gobind)
+    workingDir rootProject.projectDir
+    commandLine 'go', 'build', '-o', gobind.get().asFile, 'golang.org/x/mobile/cmd/gobind'
+}
+
+def bindGo = tasks.register('bindGo', Exec) {
+    dependsOn buildGobind
+    inputs.files(goModuleFiles, gobind, rootProject.fileTree('core') { include '*.go'; exclude '*_test.go' },
+            rootProject.fileTree('mobile') { include '*.go' })
+    inputs.property('androidHome', providers.environmentVariable('ANDROID_HOME').orElse(''))
+    inputs.property('androidNdkHome', providers.environmentVariable('ANDROID_NDK_HOME').orElse(''))
+    outputs.file(goAar)
+    workingDir rootProject.projectDir
+    def javaHome = System.getenv('JAVA_HOME') ?: System.getProperty('java.home')
+    environment 'PATH', [toolsDir.get().asFile, new File(javaHome, 'bin'), System.getenv('PATH')]
+            .join(File.pathSeparator)
+    doFirst { goAar.get().asFile.parentFile.mkdirs() }
+    commandLine 'go', 'tool', 'gomobile', 'bind', '-trimpath', '-target=android',
+            '-androidapi=26', '-javapkg=clipclean.bridge', '-o', goAar.get().asFile, './mobile'
+}
+
 dependencies {
-    implementation project(':core')
+    implementation(files(goAar).builtBy(bindGo))
 }
 
 tasks.register('debugApk', Copy) {

@@ -22,4 +22,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = 'ClipboardParameterRemover'
-include 'core', 'windows', 'android-app'
+include 'android-app'

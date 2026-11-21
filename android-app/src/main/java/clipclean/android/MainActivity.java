@@ -24,11 +24,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.function.UnaryOperator;
 
-import clipclean.core.Rules;
-import clipclean.core.Rules.Rule;
-import clipclean.core.Rules.Site;
-import clipclean.core.Settings;
-import clipclean.core.SettingsJson;
+import clipclean.bridge.mobile.Mobile;
+import clipclean.bridge.mobile.Settings;
 
 public final class MainActivity extends Activity {
     private static final int EXPORT = 1;
@@ -92,17 +89,19 @@ public final class MainActivity extends Activity {
         TextView ruleHeading = heading("削除するパラメータ", 20);
         ruleHeading.setPadding(0, dp(16), 0, 0);
         content.addView(ruleHeading);
-        for (Site site : Site.values()) {
-            TextView label = heading(site.label(), 17);
+        for (int i = 0; i < Mobile.siteCount(); i++) {
+            int site = i;
+            TextView label = heading(Mobile.siteLabel(site), 17);
             label.setPadding(0, dp(12), 0, 0);
             content.addView(label);
-            for (Rule rule : Rules.forSite(site)) {
-                addSwitch(content, rule.label(), settings.removes(site, rule),
+            for (int j = 0; j < Mobile.ruleCount(site); j++) {
+                int rule = j;
+                addSwitch(content, Mobile.ruleLabel(site, rule), settings.removes(site, rule),
                         (current, checked) -> current.withRemoved(site, rule, checked));
             }
             addSwitch(content, "リストにないパラメータも削除する", settings.removesUnknown(site),
                     (current, checked) -> current.withRemovedUnknown(site, checked));
-            if (site == Site.YOUTUBE) {
+            if (site == Mobile.YouTubeSite) {
                 TextView retained = new TextView(this);
                 retained.setText(R.string.always_keep_youtube_ids);
                 content.addView(retained);
@@ -182,7 +181,7 @@ public final class MainActivity extends Activity {
         if (request == EXPORT) {
             try (OutputStream stream = getContentResolver().openOutputStream(uri, "wt")) {
                 if (stream == null) throw new IOException("ファイルを開けません");
-                stream.write(SettingsJson.encode(settings).getBytes(StandardCharsets.UTF_8));
+                stream.write(settings.encode().getBytes(StandardCharsets.UTF_8));
             } catch (IOException | SecurityException e) {
                 message("設定をエクスポートできませんでした");
                 return;
@@ -212,13 +211,18 @@ public final class MainActivity extends Activity {
             byte[] buffer = new byte[4096];
             int count;
             while ((count = stream.read(buffer)) != -1) {
-                if (data.size() + count > SettingsJson.MAX_BYTES) {
+                if (data.size() + count > Mobile.MaxSettingsBytes) {
                     throw new IOException("設定ファイルが大きすぎます");
                 }
                 data.write(buffer, 0, count);
             }
-            return SettingsJson.decode(StandardCharsets.UTF_8.newDecoder()
-                    .decode(ByteBuffer.wrap(data.toByteArray())).toString());
+            String json = StandardCharsets.UTF_8.newDecoder()
+                    .decode(ByteBuffer.wrap(data.toByteArray())).toString();
+            try {
+                return Mobile.decode(json);
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
         }
     }
 

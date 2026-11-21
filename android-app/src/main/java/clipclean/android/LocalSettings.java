@@ -3,8 +3,8 @@ package clipclean.android;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import clipclean.core.Settings;
-import clipclean.core.SettingsJson;
+import clipclean.bridge.mobile.Mobile;
+import clipclean.bridge.mobile.Settings;
 
 final class LocalSettings {
     private static final String KEY = "settings";
@@ -16,15 +16,15 @@ final class LocalSettings {
 
     Settings load() {
         String json = preferences.getString(KEY, null);
-        if (json == null) return Settings.defaults();
+        if (json == null) return Mobile.defaults();
         try {
-            return SettingsJson.decode(json);
-        } catch (IllegalArgumentException e) {
-            return Settings.defaults();
+            return Mobile.decode(json);
+        } catch (Exception e) {
+            return Mobile.defaults();
         }
     }
 
     boolean save(Settings settings) {
-        return preferences.edit().putString(KEY, SettingsJson.encode(settings)).commit();
+        return preferences.edit().putString(KEY, settings.encode()).commit();
     }
 }
