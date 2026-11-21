@@ -1,0 +1,68 @@
+# ClipClean
+
+X、Instagram、YouTube のURLから共有情報などのクエリパラメータを削除します。処理は端末内で行われます。短縮URLは元の形式のまま使えます。
+
+## Windows
+
+1. `ClipClean-Windows.zip` を展開し、`ClipClean/ClipClean.exe` を実行します。
+2. URLをコピーすると、整理したURLがクリップボードに入ります。
+3. 通知領域のアイコンから設定、一時停止、終了を選べます。
+
+設定で「Windows ログイン時に自動起動」を ON にすると、今のユーザーのスタートアップにショートカットを登録します。展開フォルダーを移動した場合は、新しい場所から一度起動してください。
+
+## Android
+
+Android 8.0 以降で `ClipClean-Android.apk` をインストールできます。共有メニューの「ClipClean で整理してコピー」を選ぶか、URLをコピーした後で ClipClean を開いて「クリップボードを整理」を押します。
+
+## 設定
+
+- 「削除するパラメータ」で ON にした項目を削除します。初期設定では YouTube の再生開始時刻とプレイリスト指定を保持します。
+- YouTube の動画IDとプレイリスト自体のIDは常に保持します。リストにない項目も初期設定では保持します。
+- 「文章や複数行に含まれるURLも整理する」を ON にすると、共有文の中にある対応URLも処理します。
+- 設定のエクスポートとインポートで、同じ JSON ファイルを Windows と Android で使えます。
+
+## ビルド
+
+Release Please のリリース PR を `main` にマージすると、GitHub Actions が Windows ZIP と署名済み Android APK を作成し、SHA-256 を検証してから GitHub Release を公開します。タグは `v0.1.0` の形式です。Android の自動署名にはリポジトリの Actions Secrets `CLIPCLEAN_KEYSTORE_BASE64` と `CLIPCLEAN_KEYSTORE_PASSWORD` を使います。
+
+配布ファイルを検証するには、Release の `SHA256SUMS.txt` を同じフォルダーに保存して `sha256sum -c SHA256SUMS.txt` を実行します。Windows PowerShell では `Get-FileHash` で各ファイルの SHA-256 を表示して照合できます。
+
+Go 1.26 以降で共通処理をテストできます。
+
+```powershell
+go test ./...
+```
+
+### Windows
+
+Windows の PowerShell で実行すると、`dist/ClipClean-Windows.zip` が生成されます。ビルドと実行に Java は不要です。
+
+```powershell
+.\windows\package.ps1
+```
+
+### Android
+
+JDK 17、Gradle 8.11.1、Android SDK Platform 35、Android NDK r28 以降を用意し、`JAVA_HOME` と `ANDROID_HOME` を設定します。サイドバイサイドでインストールした NDK は自動検出されます。`ANDROID_NDK_HOME` で個別に指定できます。Go Mobile は Go モジュールに記録されたバージョンを Gradle が呼び出します。
+
+```powershell
+gradle :android-app:debugApk
+```
+
+`dist/ClipClean-Android-debug.apk` が生成されます。デバッグ版のアプリIDは `net.neomenia.clipclean.debug` です。Android の画面、共有メニュー、クリップボード連携には Java を使い、URL整理と設定処理は Windows と同じ Go コードを呼び出します。
+
+本番版のアプリIDは `net.neomenia.clipclean` です。署名には `.android-signing/clipclean-release.p12` の `clipclean` 鍵を使います。別の保管場所を使う場合は `CLIPCLEAN_KEYSTORE` にそのパスを設定します。キーストアと鍵に共通のパスワードを `CLIPCLEAN_KEYSTORE_PASSWORD` に設定してから `gradle :android-app:releaseApk` を実行すると、`dist/ClipClean-Android.apk` が生成されます。
+
+Windows でローカルの暗号化済みパスワードを使う場合は、保存した Windows ユーザーで次を実行します。
+
+```powershell
+$password = Get-Content .android-signing/release-password.dpapi -Raw | ConvertTo-SecureString
+$env:CLIPCLEAN_KEYSTORE_PASSWORD = [pscredential]::new('clipclean', $password).GetNetworkCredential().Password
+try { gradle --no-daemon :android-app:releaseApk } finally { Remove-Item Env:CLIPCLEAN_KEYSTORE_PASSWORD }
+```
+
+本番版を更新するには同じ鍵が必要です。キーストアとパスワードは復元できる形で保管してください。Windows で暗号化したパスワードファイルは、作成した端末とユーザーに紐づきます。
+
+### Go から利用する
+
+`net.neomenia/clipclean/core` の `core.Clean(text, settings)` で、整理後の文字列、対応URLの有無、変更の有無を取得できます。`core.Settings{}` は初期設定です。`core.DecodeSettings` に既存の設定JSONを渡すと、保存済みの設定を使えます。

@@ -1,0 +1,97 @@
+plugins {
+    id 'com.android.application' version '8.9.2'
+}
+
+def releaseStore = rootProject.file(providers.environmentVariable('CLIPCLEAN_KEYSTORE')
+        .getOrElse('.android-signing/clipclean-release.p12'))
+def releasePassword = providers.environmentVariable('CLIPCLEAN_KEYSTORE_PASSWORD')
+def appVersion = providers.fileContents(rootProject.layout.projectDirectory.file('version.txt')).asText.get().trim()
+def versionParts = appVersion.tokenize('.').collect { it.toInteger() }
+
+android {
+    namespace 'clipclean.android'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'net.neomenia.clipclean'
+        minSdk 26
+        targetSdk 35
+        versionCode versionParts[0] * 1_000_000 + versionParts[1] * 1_000 + versionParts[2]
+        versionName appVersion
+    }
+
+    signingConfigs {
+        release {
+            storeFile releaseStore
+            storeType 'PKCS12'
+            storePassword releasePassword.orNull
+            keyAlias 'clipclean'
+            keyPassword releasePassword.orNull
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+        }
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+def toolsDir = layout.buildDirectory.dir('go-tools')
+def gobindName = System.getProperty('os.name').startsWith('Windows') ? 'gobind.exe' : 'gobind'
+def gobind = toolsDir.map { it.file(gobindName) }
+def goAar = layout.buildDirectory.file('go/clipclean.aar')
+def goModuleFiles = rootProject.files('go.mod', 'go.sum')
+
+def buildGobind = tasks.register('buildGobind', Exec) {
+    inputs.files(goModuleFiles)
+    outputs.file(gobind)
+    workingDir rootProject.projectDir
+    commandLine 'go', 'build', '-o', gobind.get().asFile, 'golang.org/x/mobile/cmd/gobind'
+}
+
+def bindGo = tasks.register('bindGo', Exec) {
+    dependsOn buildGobind
+    inputs.files(goModuleFiles, gobind, rootProject.fileTree('core') { include '*.go'; exclude '*_test.go' },
+            rootProject.fileTree('mobile') { include '*.go' })
+    inputs.property('androidHome', providers.environmentVariable('ANDROID_HOME').orElse(''))
+    inputs.property('androidNdkHome', providers.environmentVariable('ANDROID_NDK_HOME').orElse(''))
+    outputs.file(goAar)
+    workingDir rootProject.projectDir
+    def javaHome = System.getenv('JAVA_HOME') ?: System.getProperty('java.home')
+    environment 'PATH', [toolsDir.get().asFile, new File(javaHome, 'bin'), System.getenv('PATH')]
+            .join(File.pathSeparator)
+    doFirst { goAar.get().asFile.parentFile.mkdirs() }
+    commandLine 'go', 'tool', 'gomobile', 'bind', '-trimpath', '-target=android',
+            '-androidapi=26', '-javapkg=clipclean.bridge', '-o', goAar.get().asFile, './mobile'
+}
+
+dependencies {
+    implementation(files(goAar).builtBy(bindGo))
+}
+
+tasks.register('debugApk', Copy) {
+    dependsOn 'assembleDebug'
+    from layout.buildDirectory.file('outputs/apk/debug/android-app-debug.apk')
+    into rootProject.layout.projectDirectory.dir('dist')
+    rename { 'ClipClean-Android-debug.apk' }
+}
+
+tasks.register('releaseApk', Copy) {
+    dependsOn 'assembleRelease'
+    from layout.buildDirectory.file('outputs/apk/release/android-app-release.apk')
+    into rootProject.layout.projectDirectory.dir('dist')
+    rename { 'ClipClean-Android.apk' }
+}

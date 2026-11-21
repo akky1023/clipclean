@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="always_keep_youtube_ids">動画IDとプレイリスト自体のIDは常に保持</string>
+</resources>

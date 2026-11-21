@@ -1,0 +1,161 @@
+name: Release ClipClean
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft's tag to rebuild and publish (leave empty to run Release Please)
+        type: string
+
+concurrency:
+  group: clipclean-release
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      tag: ${{ steps.source.outputs.tag }}
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        id: release
+        if: inputs.tag == ''
+      - name: Verify release tag and commit SHA
+        id: source
+        if: inputs.tag != '' || steps.release.outputs.release_created == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || steps.release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          [[ -z "$RELEASE_SHA" || "$sha" == "$RELEASE_SHA" ]]
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id")
+          [[ "$id" =~ ^[0-9]+$ ]]
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: prepare
+    if: needs.prepare.outputs.tag != ''
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Test and package Windows
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if ("v$((Get-Content version.txt -Raw).Trim())" -ne $env:TAG) { throw 'Release version mismatch' }
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./windows/package.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows
+          path: dist/ClipClean-Windows.zip
+          if-no-files-found: error
+          overwrite: true
+
+  android:
+    needs: prepare
+    if: needs.prepare.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android platform and NDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.2.13676358'
+      - name: Build and verify signed production APK
+        shell: bash
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          CLIPCLEAN_KEYSTORE_BASE64: ${{ secrets.CLIPCLEAN_KEYSTORE_BASE64 }}
+          CLIPCLEAN_KEYSTORE_PASSWORD: ${{ secrets.CLIPCLEAN_KEYSTORE_PASSWORD }}
+        run: |
+          [[ "v$(cat version.txt)" == "$TAG" ]]
+          : "${CLIPCLEAN_KEYSTORE_BASE64:?Missing Android release keystore}"
+          : "${CLIPCLEAN_KEYSTORE_PASSWORD:?Missing Android release password}"
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          CLIPCLEAN_KEYSTORE=$(mktemp "$RUNNER_TEMP/clipclean.XXXXXX.p12")
+          export CLIPCLEAN_KEYSTORE
+          trap 'rm -f -- "$CLIPCLEAN_KEYSTORE"' EXIT
+          printf '%s' "$CLIPCLEAN_KEYSTORE_BASE64" | base64 --decode > "$CLIPCLEAN_KEYSTORE"
+          unset CLIPCLEAN_KEYSTORE_BASE64
+          gradle --no-daemon :android-app:releaseApk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify dist/ClipClean-Android.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/ClipClean-Android.apk > "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='net.neomenia.clipclean'" "$RUNNER_TEMP/apk-badging.txt" | grep -F "versionName='${TAG#v}'"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android
+          path: dist/ClipClean-Android.apk
+          if-no-files-found: error
+          overwrite: true
+
+  publish:
+    needs: [prepare, windows, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          merge-multiple: true
+          path: dist
+      - name: Verify assets and publish release
+        working-directory: dist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          [[ $(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha) == "$RELEASE_SHA" ]]
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id")
+          [[ "$id" =~ ^[0-9]+$ ]]
+
+          sha256sum ClipClean-Windows.zip ClipClean-Android.apk > SHA256SUMS.txt
+          sha256sum --strict --check SHA256SUMS.txt
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            ClipClean-Windows.zip ClipClean-Android.apk SHA256SUMS.txt
+
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/$id/assets" --paginate)
+          for file in ClipClean-Windows.zip ClipClean-Android.apk SHA256SUMS.txt; do
+            local_hash=$(sha256sum "$file" | cut -d ' ' -f 1)
+            uploaded_hash=$(jq -r --arg name "$file" '.[] | select(.name == $name) | .digest' <<< "$assets")
+            [[ "$uploaded_hash" == "sha256:$local_hash" ]]
+          done
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
