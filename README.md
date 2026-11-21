@@ -23,8 +23,6 @@ Android 8.0 以降で `ClipClean-Android.apk` をインストールできます�
 
 ## ビルド
 
-Release Please のリリース PR を `main` にマージすると、GitHub Actions が Windows ZIP と署名済み Android APK を作成し、SHA-256 を検証してから GitHub Release を公開します。タグは `v0.1.0` の形式です。Android の自動署名にはリポジトリの Actions Secrets `CLIPCLEAN_KEYSTORE_BASE64` と `CLIPCLEAN_KEYSTORE_PASSWORD` を使います。
-
 配布ファイルを検証するには、Release の `SHA256SUMS.txt` を同じフォルダーに保存して `sha256sum -c SHA256SUMS.txt` を実行します。Windows PowerShell では `Get-FileHash` で各ファイルの SHA-256 を表示して照合できます。
 
 Go 1.26 以降で共通処理をテストできます。
@@ -50,18 +48,6 @@ gradle :android-app:debugApk
 ```
 
 `dist/ClipClean-Android-debug.apk` が生成されます。デバッグ版のアプリIDは `net.neomenia.clipclean.debug` です。Android の画面、共有メニュー、クリップボード連携には Java を使い、URL整理と設定処理は Windows と同じ Go コードを呼び出します。
-
-本番版のアプリIDは `net.neomenia.clipclean` です。署名には `.android-signing/clipclean-release.p12` の `clipclean` 鍵を使います。別の保管場所を使う場合は `CLIPCLEAN_KEYSTORE` にそのパスを設定します。キーストアと鍵に共通のパスワードを `CLIPCLEAN_KEYSTORE_PASSWORD` に設定してから `gradle :android-app:releaseApk` を実行すると、`dist/ClipClean-Android.apk` が生成されます。
-
-Windows でローカルの暗号化済みパスワードを使う場合は、保存した Windows ユーザーで次を実行します。
-
-```powershell
-$password = Get-Content .android-signing/release-password.dpapi -Raw | ConvertTo-SecureString
-$env:CLIPCLEAN_KEYSTORE_PASSWORD = [pscredential]::new('clipclean', $password).GetNetworkCredential().Password
-try { gradle --no-daemon :android-app:releaseApk } finally { Remove-Item Env:CLIPCLEAN_KEYSTORE_PASSWORD }
-```
-
-本番版を更新するには同じ鍵が必要です。キーストアとパスワードは復元できる形で保管してください。Windows で暗号化したパスワードファイルは、作成した端末とユーザーに紐づきます。
 
 ### Go から利用する
 
