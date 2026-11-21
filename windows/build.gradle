@@ -36,7 +36,7 @@ tasks.register('packagePortable', Exec) {
         commandLine new File(javaBin, 'jpackage.exe'), '--type', 'app-image',
                 '--name', 'ClipClean', '--input', staging.get().asFile,
                 '--dest', destination.get().asFile, '--main-jar', tasks.jar.archiveFileName.get(),
-                '--main-class', application.mainClass.get(), '--app-version', '0.1.0',
+                '--main-class', application.mainClass.get(), '--app-version', '0.1.1',
                 '--add-modules', 'java.desktop,java.logging'
     }
 }

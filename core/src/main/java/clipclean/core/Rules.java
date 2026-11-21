@@ -43,6 +43,7 @@ public final class Rules {
     private static final List<Rule> X_RULES = rules(
             UTM, FBCLID, new Rule("s", "投稿の共有情報（s）", true),
             new Rule("t", "投稿の共有情報（t）", true),
+            new Rule("a", "共有リンクのパラメータ（a）", true),
             new Rule("ref_src", "参照元（ref_src）", true),
             new Rule("ref_url", "参照元URL（ref_url）", true));
     private static final List<Rule> INSTAGRAM_RULES = rules(

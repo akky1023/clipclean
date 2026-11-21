@@ -6,9 +6,9 @@ import clipclean.core.Rules.Site;
 public final class CoreChecks {
     public static void main(String[] args) {
         Settings defaults = Settings.defaults();
-        check(defaults, "https://x.com/u/status/1?s=20&t=abc", "https://x.com/u/status/1");
-        check(defaults, "http://mobile.twitter.com/u/status/1?ref_src=old", "http://mobile.twitter.com/u/status/1");
-        check(defaults, "https://t.co/a?utm_source=x&destination=anything", "https://t.co/a?destination=anything");
+        check(defaults, "https://x.com/u/status/1?s=20&t=abc&a=share", "https://x.com/u/status/1");
+        check(defaults, "http://mobile.twitter.com/u/status/1?ref_src=old&a=", "http://mobile.twitter.com/u/status/1");
+        check(defaults, "https://t.co/a?utm_source=x&a=share&destination=anything", "https://t.co/a?destination=anything");
         check(defaults, "https://t.co/a", "https://t.co/a");
         check(defaults, "https://www.instagram.com/reel/abc/?igsh=123#fragment", "https://www.instagram.com/reel/abc/#fragment");
         check(defaults, "https://www.instagram.com/share/reel/xyz/?igsh=abc", "https://www.instagram.com/share/reel/xyz/");
@@ -18,6 +18,7 @@ public final class CoreChecks {
         check(defaults, " https://www.youtube.com/watch?%76=abc&q=A%20B&si=x&q=A+B\t",
                 " https://www.youtube.com/watch?%76=abc&q=A%20B&q=A+B\t");
         check(defaults, "https://www.youtube.com/watch?v=abc&%73i=a&si=b", "https://www.youtube.com/watch?v=abc");
+        check(defaults, "https://youtu.be/abc?a=unknown", "https://youtu.be/abc?a=unknown");
 
         unsupported(defaults, "文章 https://youtu.be/abc?si=123");
         unsupported(defaults, "https://youtu.be/abc\nhttps://x.com/u/status/1?s=20");
@@ -46,9 +47,13 @@ public final class CoreChecks {
         check(custom, "https://instagram.com/p/abc/?igsh=x&other=1",
                 "https://instagram.com/p/abc/?igsh=x&other=1");
 
+        Settings oldSettings = SettingsJson.decode(SettingsJson.encode(custom).replace("\"a\": true,", ""));
+        check(oldSettings, "https://x.com/u/status/1?a=share", "https://x.com/u/status/1");
+        custom = custom.withRemoved(Site.X, rule(Site.X, "a"), false);
         String encoded = SettingsJson.encode(custom);
         Settings imported = SettingsJson.decode(encoded);
         require(SettingsJson.encode(imported).equals(encoded), "settings round trip");
+        check(imported, "https://x.com/u/status/1?a=share&s=20", "https://x.com/u/status/1?a=share");
         invalid(encoded.replace("\"version\": 1", "\"version\": 2"));
         invalid(encoded.replace("\"embeddedUrls\": true", "\"embeddedUrls\": \"true\""));
         invalid(encoded + " {}");
