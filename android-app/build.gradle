@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application' version '8.9.2'
 }
 
+def releaseStore = rootProject.file(providers.environmentVariable('CLIPCLEAN_KEYSTORE')
+        .getOrElse('.android-signing/clipclean-release.p12'))
+def releasePassword = providers.environmentVariable('CLIPCLEAN_KEYSTORE_PASSWORD')
+
 android {
     namespace 'clipclean.android'
     compileSdk 35
@@ -12,6 +16,25 @@ android {
         targetSdk 35
         versionCode 2
         versionName '0.1.1'
+    }
+
+    signingConfigs {
+        release {
+            storeFile releaseStore
+            storeType 'PKCS12'
+            storePassword releasePassword.orNull
+            keyAlias 'clipclean'
+            keyPassword releasePassword.orNull
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+        }
+        release {
+            signingConfig signingConfigs.release
+        }
     }
 
     compileOptions {
@@ -62,4 +85,11 @@ tasks.register('debugApk', Copy) {
     from layout.buildDirectory.file('outputs/apk/debug/android-app-debug.apk')
     into rootProject.layout.projectDirectory.dir('dist')
     rename { 'ClipClean-Android-debug.apk' }
+}
+
+tasks.register('releaseApk', Copy) {
+    dependsOn 'assembleRelease'
+    from layout.buildDirectory.file('outputs/apk/release/android-app-release.apk')
+    into rootProject.layout.projectDirectory.dir('dist')
+    rename { 'ClipClean-Android.apk' }
 }

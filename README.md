@@ -12,7 +12,7 @@ X、Instagram、YouTube のURLから共有情報などのクエリパラメー�
 
 ## Android
 
-Android 8.0 以降で `ClipClean-Android-debug.apk` をインストールできます。共有メニューの「ClipClean で整理してコピー」を選ぶか、URLをコピーした後で ClipClean を開いて「クリップボードを整理」を押します。
+Android 8.0 以降で `ClipClean-Android.apk` をインストールできます。共有メニューの「ClipClean で整理してコピー」を選ぶか、URLをコピーした後で ClipClean を開いて「クリップボードを整理」を押します。
 
 ## 設定
 
@@ -45,7 +45,19 @@ JDK 17、Gradle 8.11.1、Android SDK Platform 35、Android NDK r28 以降を用�
 gradle :android-app:debugApk
 ```
 
-`dist/ClipClean-Android-debug.apk` が生成されます。Android の画面、共有メニュー、クリップボード連携には Java を使い、URL整理と設定処理は Windows と同じ Go コードを呼び出します。
+`dist/ClipClean-Android-debug.apk` が生成されます。デバッグ版のアプリIDは `net.neomenia.clipclean.debug` です。Android の画面、共有メニュー、クリップボード連携には Java を使い、URL整理と設定処理は Windows と同じ Go コードを呼び出します。
+
+本番版のアプリIDは `net.neomenia.clipclean` です。署名には `.android-signing/clipclean-release.p12` の `clipclean` 鍵を使います。別の保管場所を使う場合は `CLIPCLEAN_KEYSTORE` にそのパスを設定します。キーストアと鍵に共通のパスワードを `CLIPCLEAN_KEYSTORE_PASSWORD` に設定してから `gradle :android-app:releaseApk` を実行すると、`dist/ClipClean-Android.apk` が生成されます。
+
+Windows でローカルの暗号化済みパスワードを使う場合は、保存した Windows ユーザーで次を実行します。
+
+```powershell
+$password = Get-Content .android-signing/release-password.dpapi -Raw | ConvertTo-SecureString
+$env:CLIPCLEAN_KEYSTORE_PASSWORD = [pscredential]::new('clipclean', $password).GetNetworkCredential().Password
+try { gradle --no-daemon :android-app:releaseApk } finally { Remove-Item Env:CLIPCLEAN_KEYSTORE_PASSWORD }
+```
+
+本番版を更新するには同じ鍵が必要です。キーストアとパスワードは復元できる形で保管してください。Windows で暗号化したパスワードファイルは、作成した端末とユーザーに紐づきます。
 
 ### Go から利用する
 

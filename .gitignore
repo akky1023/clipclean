@@ -1,6 +1,7 @@
 /.gradle/
 /.gradle-user/
 /.android-user/
+/.android-signing/
 **/build/
 /dist/
 /local.properties
