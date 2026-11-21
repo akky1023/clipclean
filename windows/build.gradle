@@ -1,0 +1,51 @@
+plugins {
+    id 'application'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    implementation project(':core')
+    implementation 'net.java.dev.jna:jna-platform:5.6.0'
+}
+
+application {
+    mainClass = 'clipclean.windows.WindowsApp'
+}
+
+def staging = layout.buildDirectory.dir('package-input')
+def destination = layout.buildDirectory.dir('package')
+def appImage = destination.map { it.dir('ClipClean') }
+
+tasks.register('preparePackage', Sync) {
+    dependsOn jar
+    from tasks.jar, configurations.runtimeClasspath
+    into staging
+}
+
+tasks.register('packagePortable', Exec) {
+    dependsOn preparePackage
+    inputs.dir(staging)
+    outputs.dir(appImage)
+    doFirst {
+        project.delete(appImage)
+        def javaBin = new File(System.getProperty('java.home'), 'bin')
+        commandLine new File(javaBin, 'jpackage.exe'), '--type', 'app-image',
+                '--name', 'ClipClean', '--input', staging.get().asFile,
+                '--dest', destination.get().asFile, '--main-jar', tasks.jar.archiveFileName.get(),
+                '--main-class', application.mainClass.get(), '--app-version', '0.1.0',
+                '--add-modules', 'java.desktop,java.logging'
+    }
+}
+
+tasks.register('portableZip', Zip) {
+    dependsOn packagePortable
+    from(layout.buildDirectory.dir('package/ClipClean')) {
+        into 'ClipClean'
+    }
+    archiveFileName = 'ClipClean-Windows.zip'
+    destinationDirectory = rootProject.layout.projectDirectory.dir('dist')
+}
